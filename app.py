@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, render_template, send_from_directory,
 from werkzeug.utils import secure_filename
 from PIL import Image
 import imagehash
+import json
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
@@ -85,6 +86,97 @@ def map_label_to_category(label):
         if key in label_text:
             return category
     return None
+
+
+def classify_with_vision_api(image_path):
+    """
+    Classify image using Google Cloud Vision API.
+    Requires GOOGLE_APPLICATION_CREDENTIALS environment variable pointing to service account JSON.
+    Returns dict with category, explanation, label, and confidence, or None if API unavailable.
+    """
+    try:
+        from google.cloud import vision
+        from google.oauth2 import service_account
+    except ImportError:
+        return None
+
+    try:
+        # Initialize Vision API client
+        client = vision.ImageAnnotatorClient()
+
+        # Read image file
+        with open(image_path, 'rb') as f:
+            image_content = f.read()
+
+        image = vision.Image(content=image_content)
+
+        # Perform label detection (object recognition)
+        response = client.label_detection(image=image)
+        labels = response.label_annotations
+
+        if not labels:
+            return None
+
+        # Extract top labels and try to map to our categories
+        detected_objects = [label.description.lower() for label in labels[:10]]
+        confidences = [float(label.score) for label in labels[:10]]
+
+        result = None
+        best_confidence = 0
+
+        # Find best matching category from detected objects
+        for i, obj_label in enumerate(detected_objects):
+            category = map_label_to_category(obj_label)
+            if category and confidences[i] > best_confidence:
+                best_confidence = confidences[i]
+                result = {
+                    'label': obj_label,
+                    'confidence': round(best_confidence, 3),
+                    'category': category,
+                    'explanation': CATEGORY_EXPLANATIONS.get(category),
+                    'detected_objects': detected_objects[:5]
+                }
+
+        # If no direct match, try common keywords
+        if result is None:
+            keywords_to_check = {
+                'computer': 'Equipamentos de informática',
+                'phone': 'Dispositivos de comunicação',
+                'mobile': 'Dispositivos de comunicação',
+                'tv': 'Equipamentos de áudio e vídeo',
+                'television': 'Equipamentos de áudio e vídeo',
+                'speaker': 'Equipamentos de áudio e vídeo',
+                'battery': 'Pilhas e baterias',
+                'charger': 'Carregadores e cabos',
+                'cable': 'Carregadores e cabos',
+                'lamp': 'Equipamentos de iluminação',
+                'light': 'Equipamentos de iluminação',
+                'circuit': 'Componentes eletrônicos',
+                'electronic': 'Componentes eletrônicos',
+                'microwave': 'Eletrodomésticos eletrônicos',
+                'oven': 'Eletrodomésticos eletrônicos',
+                'blender': 'Eletrodomésticos eletrônicos',
+            }
+
+            for i, obj_label in enumerate(detected_objects):
+                for keyword, category in keywords_to_check.items():
+                    if keyword in obj_label:
+                        result = {
+                            'label': obj_label,
+                            'confidence': round(confidences[i], 3),
+                            'category': category,
+                            'explanation': CATEGORY_EXPLANATIONS.get(category),
+                            'detected_objects': detected_objects[:5]
+                        }
+                        break
+                if result:
+                    break
+
+        return result
+
+    except Exception as e:
+        print(f"[Vision API Error] {str(e)}")
+        return None
 
 
 def init_db():
@@ -169,8 +261,20 @@ def find_nearest_k(phash_hex, k=3):
 
 
 def try_classify(image_path):
-    """Optional ML classification using TensorFlow MobileNetV2 if available.
-    Returns a dict with category, explanation, label and confidence, or None if TF not available."""
+    """
+    ML classification with fallback chain:
+    1. Google Cloud Vision API (if credentials available)
+    2. TensorFlow MobileNetV2 (if available)
+    3. Returns None if both unavailable
+    
+    Returns a dict with category, explanation, label and confidence.
+    """
+    # Try Google Vision API first
+    vision_result = classify_with_vision_api(image_path)
+    if vision_result:
+        return vision_result
+
+    # Fallback to TensorFlow
     try:
         from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input, decode_predictions
         from tensorflow.keras.preprocessing import image
