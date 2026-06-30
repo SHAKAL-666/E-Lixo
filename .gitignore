@@ -1,0 +1,30 @@
+/.venv
+.venv-1
+venv/
+__pycache__/
+*.pyc
+uploads/
+data/images.db
+.env
+*.egg-info
+dist/
+.pytest_cache/# Python virtual environments
+.venv/
+.venv-1/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test artifacts
+.pytest_cache/
+
+# Local storage
+uploads/
+data/
+*.db
+
+# Editor settings
+.vscode/
+.idea/
