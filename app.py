@@ -17,6 +17,7 @@ ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 app = Flask(__name__, root_path=BASE_DIR, instance_path=BASE_DIR)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-for-local')
+app.config['DEBUG'] = os.environ.get('FLASK_DEBUG', '1') == '1'
 
 # Simple admin credentials (override via env vars in production)
 ADMIN_USER = os.environ.get('E_LIXO_ADMIN_USER', 'admin')
@@ -216,6 +217,11 @@ def index():
     return render_template('index.html', is_admin=session.get('admin', False))
 
 
+@app.route('/healthz')
+def healthz():
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -360,4 +366,6 @@ def catalog():
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', '8000'))
+    app.run(host=host, port=port, debug=app.config['DEBUG'])

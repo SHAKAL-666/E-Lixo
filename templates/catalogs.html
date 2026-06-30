@@ -7,22 +7,66 @@
       <h1 class="display-6 mb-2">Catálogo de Lixo Eletrônico</h1>
       <p class="section-note mb-0">Veja todos os itens cadastrados com imagens, categorias e explicações.</p>
     </div>
-    <a class="btn btn-primary btn-lg" href="/">Enviar nova imagem</a>
+    <a class="btn btn-primary btn-lg" href="/"><i class="fas fa-cloud-upload-alt me-2"></i>Enviar nova imagem</a>
   </div>
 
+  {% if items|length > 0 %}
+  <div class="mb-4 p-3 bg-glass rounded">
+    <label class="form-label text-white mb-2"><i class="fas fa-filter category-icon"></i>Filtrar por categoria:</label>
+    <div class="d-flex flex-wrap gap-2" id="filterButtons">
+      <button class="btn btn-sm btn-outline-light active" data-category="all">Todas</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Equipamentos de informática"><i class="fas fa-laptop me-1"></i>Informática</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Dispositivos de comunicação"><i class="fas fa-mobile-alt me-1"></i>Comunicação</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Equipamentos de áudio e vídeo"><i class="fas fa-tv me-1"></i>Áudio/Vídeo</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Pilhas e baterias"><i class="fas fa-battery-half me-1"></i>Baterias</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Carregadores e cabos"><i class="fas fa-plug me-1"></i>Carregadores</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Eletrodomésticos eletrônicos"><i class="fas fa-toaster me-1"></i>Eletrodomésticos</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Equipamentos de iluminação"><i class="fas fa-lightbulb me-1"></i>Iluminação</button>
+      <button class="btn btn-sm btn-outline-light" data-category="Componentes eletrônicos"><i class="fas fa-microchip me-1"></i>Componentes</button>
+    </div>
+  </div>
+  {% endif %}
+
   {% if items|length == 0 %}
-    <div class="alert alert-secondary">Nenhum item cadastrado ainda.</div>
+    <div class="alert alert-secondary"><i class="fas fa-inbox me-2"></i>Nenhum item cadastrado ainda. <a href="/" class="alert-link">Envie uma imagem</a> para começar.</div>
   {% else %}
-    <div class="row g-4">
+    <div class="row g-4" id="itemsContainer">
       {% for it in items %}
-      <div class="col-lg-4 col-md-6">
-        <div class="card card-transparent catalog-card h-100">
+      <div class="col-lg-4 col-md-6 item-card" data-category="{{ it.category }}">
+        <div class="card card-transparent catalog-card h-100 cursor-pointer" data-bs-toggle="modal" data-bs-target="#itemModal{{ it.id }}">
           <img src="/uploads/{{ it.filename }}" class="img-fluid rounded-4" alt="{{ it.filename }}" style="height:220px; width:100%; object-fit:cover;" />
           <div class="card-body p-4">
-            <span class="badge category-badge mb-3">{{ it.category }}</span>
-            <h5 class="card-title">Item #{{ it.id }}</h5>
+            <span class="badge category-badge mb-3"><i class="fas fa-tag me-1"></i>{{ it.category }}</span>
+            <h5 class="card-title"><i class="fas fa-hashtag me-1"></i>Item #{{ it.id }}</h5>
             <p class="section-note mb-3">{{ it.explanation or 'Explicação não registrada.' }}</p>
             <p class="mb-0"><small class="text-white-50">{{ explanations.get(it.category) or 'Categoria sem descrição.' }}</small></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal para visualizar item em detalhe -->
+      <div class="modal fade" id="itemModal{{ it.id }}" tabindex="-1" aria-labelledby="itemModalLabel{{ it.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="itemModalLabel{{ it.id }}"><i class="fas fa-hashtag me-2"></i>Item #{{ it.id }}</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <img src="/uploads/{{ it.filename }}" class="img-fluid w-100 mb-3" alt="{{ it.filename }}" />
+              <div class="mb-3">
+                <h6>Categoria:</h6>
+                <span class="badge category-badge"><i class="fas fa-tag me-1"></i>{{ it.category }}</span>
+              </div>
+              <div class="mb-3">
+                <h6>Explicação:</h6>
+                <p class="text-white">{{ it.explanation or 'Explicação não registrada.' }}</p>
+              </div>
+              <div>
+                <h6>Descrição da Categoria:</h6>
+                <p class="section-note mb-0">{{ explanations.get(it.category) or 'Categoria sem descrição.' }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -30,4 +74,24 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+  const filterButtons = document.querySelectorAll('#filterButtons button');
+  const itemCards = document.querySelectorAll('.item-card');
+
+  filterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const category = btn.dataset.category;
+      itemCards.forEach(card => {
+        if (category === 'all' || card.dataset.category === category) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}
