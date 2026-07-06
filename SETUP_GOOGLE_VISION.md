@@ -80,7 +80,11 @@
    - **Key**: `GOOGLE_CLOUD_KEY_JSON`
    - **Value**: Cole todo o conteúdo do arquivo `.json` entre aspas
 
-6. No `app.py`, o código automaticamente usará a chave se a variável estiver definida.
+   Você também pode usar:
+   - **Key**: `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+   - **Value**: Cole o JSON completo da chave aqui
+
+6. No `app.py`, o código automaticamente usará a chave se qualquer dessas variáveis estiver definida.
 
 ---
 

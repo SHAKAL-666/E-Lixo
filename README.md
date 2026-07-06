@@ -104,7 +104,11 @@ Para ativar classificação automática com IA:
    $env:GOOGLE_APPLICATION_CREDENTIALS="C:\caminho\seu-arquivo.json"
    ```
 5. Teste com: `python test_vision_api.py`
-
+> O app também aceita credenciais em texto JSON via variáveis de ambiente:
+> - `GOOGLE_CLOUD_KEY_JSON`
+> - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+> 
+> Isso é útil em containers ou plataformas como Render.
 📖 **Guia detalhado**: Ver arquivo [`SETUP_GOOGLE_VISION.md`](SETUP_GOOGLE_VISION.md)
 
 ---

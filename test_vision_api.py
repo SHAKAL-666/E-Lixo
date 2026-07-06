@@ -20,8 +20,25 @@ def test_vision_api():
     # Verificar se credenciais estão configuradas
     creds_env = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     if not creds_env:
-        print("\n❌ ERRO: Variável GOOGLE_APPLICATION_CREDENTIALS não configurada")
-        print("\nPara testar a Vision API, defina a variável de ambiente:")
+        # fallback: try to find a JSON key file in the tests folder and project root
+        search_dirs = [os.path.dirname(os.path.abspath(__file__)), os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))]
+        for search_dir in search_dirs:
+            for filename in os.listdir(search_dir):
+                if filename.lower().endswith('.json'):
+                    candidate = os.path.join(search_dir, filename)
+                    try:
+                        with open(candidate, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        if 'private_key' in content and 'client_email' in content:
+                            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = candidate
+                            creds_env = candidate
+                            break
+                    except Exception:
+                        continue
+            if creds_env:
+                break
+
+    if not creds_env:
         print('  $env:GOOGLE_APPLICATION_CREDENTIALS="C:\\caminho\\para\\arquivo.json"')
         print("\nVeja SETUP_GOOGLE_VISION.md para instruções completas.")
         return False
@@ -54,14 +71,23 @@ def test_vision_api():
         try:
             result = classify_with_vision_api(img_path)
             
-            if result:
-                print(f"    ✅ Sucesso!")
-                print(f"       Rótulo detectado: {result['label']}")
-                print(f"       Categoria: {result['category']}")
-                print(f"       Confiança: {result['confidence'] * 100:.1f}%")
-                if 'detected_objects' in result:
-                    print(f"       Objetos: {', '.join(result['detected_objects'][:3])}")
-                success_count += 1
+            if isinstance(result, dict) and result.get('error'):
+                print(f"    ⚠️  Erro na classificação: {result.get('error')} - {result.get('message')}")
+            elif result:
+                # ensure keys exist
+                label = result.get('label')
+                category = result.get('category')
+                confidence = result.get('confidence')
+                if label is None or category is None or confidence is None:
+                    print(f"    ⚠️  Resposta inesperada da IA: {result}")
+                else:
+                    print(f"    ✅ Sucesso!")
+                    print(f"       Rótulo detectado: {label}")
+                    print(f"       Categoria: {category}")
+                    print(f"       Confiança: {confidence * 100:.1f}%")
+                    if 'detected_objects' in result:
+                        print(f"       Objetos: {', '.join(result['detected_objects'][:3])}")
+                    success_count += 1
             else:
                 print(f"    ⚠️  Nenhuma detecção")
                 

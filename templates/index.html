@@ -150,11 +150,13 @@
       if (body.ml_suggestion) {
         const m = body.ml_suggestion;
         const pm = document.createElement('div');
-        pm.className = 'alert alert-success';
-        let mlText = `<strong>IA Automática:</strong> ${m.category || m.label} (confiança ${m.confidence})`;
-        if (m.explanation) mlText += `<br/><small>${m.explanation}</small>`;
+        pm.className = m.error ? 'alert alert-warning' : 'alert alert-success';
+        let mlText = m.error
+          ? `<strong>IA Automática:</strong> ${m.message || 'Não foi possível classificar automaticamente.'}`
+          : `<strong>IA Automática:</strong> ${m.category || m.label} (confiança ${m.confidence})`;
+        if (m.explanation && !m.error) mlText += `<br/><small>${m.explanation}</small>`;
         pm.innerHTML = mlText;
-        if (m.category) {
+        if (!m.error && m.category) {
           const acceptMLBtn = document.createElement('button');
           acceptMLBtn.className = 'btn btn-sm btn-success mt-2';
           acceptMLBtn.textContent = 'Usar IA';

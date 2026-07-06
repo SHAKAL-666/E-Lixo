@@ -88,17 +88,100 @@ def map_label_to_category(label):
     return None
 
 
+def ensure_google_credentials():
+    def validate_credentials_file(candidate):
+        try:
+            with open(candidate, 'r', encoding='utf-8') as f:
+                payload = json.load(f)
+        except Exception as exc:
+            print(f'[Vision API Error] Could not parse credentials JSON at {candidate}: {exc}')
+            return None
+
+        required_fields = ['type', 'project_id', 'private_key', 'client_email', 'token_uri']
+        missing = [field for field in required_fields if not payload.get(field)]
+        if payload.get('type') != 'service_account':
+            print(f'[Vision API Error] Unsupported credentials type in {candidate}: {payload.get("type")}')
+            return None
+        if missing:
+            print(f'[Vision API Error] Credentials file {candidate} is missing required fields: {", ".join(missing)}')
+            return None
+        return candidate
+
+    # The app can discover credentials in three ways:
+    # 1) GOOGLE_APPLICATION_CREDENTIALS pointing to a JSON key file
+    # 2) GOOGLE_APPLICATION_CREDENTIALS containing the JSON payload itself
+    # 3) GOOGLE_CLOUD_KEY_JSON or GOOGLE_APPLICATION_CREDENTIALS_JSON containing the JSON payload
+    creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if creds:
+        creds = creds.strip()
+        if creds.startswith('{') and 'private_key' in creds and 'client_email' in creds:
+            try:
+                credentials_path = os.path.join(BASE_DIR, 'google_service_account.json')
+                with open(credentials_path, 'w', encoding='utf-8') as f:
+                    f.write(creds)
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+                print(f'[Vision API] Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS JSON payload into {credentials_path}')
+                return credentials_path
+            except Exception as e:
+                print(f'[Vision API Error] could not write GOOGLE_APPLICATION_CREDENTIALS JSON payload to file: {e}')
+                return None
+
+        candidate_path = os.path.expanduser(creds.strip('"\''))
+        if os.path.exists(candidate_path):
+            print(f'[Vision API] Using GOOGLE_APPLICATION_CREDENTIALS={candidate_path}')
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = candidate_path
+            return candidate_path
+        print(f'[Vision API] GOOGLE_APPLICATION_CREDENTIALS is set but file not found: {candidate_path}. Trying alternate sources.')
+
+    json_payload = os.environ.get('GOOGLE_CLOUD_KEY_JSON') or os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+    if json_payload:
+        try:
+            credentials_path = os.path.join(BASE_DIR, 'google_service_account.json')
+            with open(credentials_path, 'w', encoding='utf-8') as f:
+                f.write(json_payload)
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+            print(f'[Vision API] Loaded credentials from JSON environment variable into {credentials_path}')
+            return credentials_path
+        except Exception as e:
+            print(f'[Vision API Error] could not write JSON env var to file: {e}')
+            return None
+
+    # Fallback: look for a downloaded service account JSON in the project root or data folder
+    search_paths = [BASE_DIR, os.path.join(BASE_DIR, 'data')]
+    for search_path in search_paths:
+        if not os.path.isdir(search_path):
+            continue
+        for filename in os.listdir(search_path):
+            if filename.lower().endswith('.json'):
+                candidate = os.path.join(search_path, filename)
+                if os.path.isfile(candidate):
+                    validated = validate_credentials_file(candidate)
+                    if validated:
+                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = validated
+                        print(f'[Vision API] Found service account JSON at {validated}')
+                        return validated
+    return None
+
+
 def classify_with_vision_api(image_path):
     """
     Classify image using Google Cloud Vision API.
     Requires GOOGLE_APPLICATION_CREDENTIALS environment variable pointing to service account JSON.
-    Returns dict with category, explanation, label, and confidence, or None if API unavailable.
+    Returns a dict with category, explanation, label, and confidence, or an error dict when unavailable.
     """
+    creds_path = ensure_google_credentials()
+    if not creds_path:
+        return {
+            'error': 'missing_credentials',
+            'message': 'Credencial do Google Vision não encontrada. Defina GOOGLE_APPLICATION_CREDENTIALS com um arquivo JSON válido do service account.'
+        }
     try:
         from google.cloud import vision
-        from google.oauth2 import service_account
     except ImportError:
-        return None
+        return {
+            'error': 'missing_dependency',
+            'message': 'O pacote google-cloud-vision não está instalado. Instale-o para habilitar a classificação automática.'
+        }
 
     try:
         # Initialize Vision API client
@@ -112,10 +195,12 @@ def classify_with_vision_api(image_path):
 
         # Perform label detection (object recognition)
         response = client.label_detection(image=image)
-        labels = response.label_annotations
+        if response.error and response.error.message:
+            return {'error': 'vision_api_error', 'message': response.error.message}
 
+        labels = response.label_annotations
         if not labels:
-            return None
+            return {'error': 'no_labels', 'message': 'A imagem não retornou rótulos suficientes para sugestão automática.'}
 
         # Extract top labels and try to map to our categories
         detected_objects = [label.description.lower() for label in labels[:10]]
@@ -175,8 +260,13 @@ def classify_with_vision_api(image_path):
         return result
 
     except Exception as e:
-        print(f"[Vision API Error] {str(e)}")
-        return None
+        error_message = str(e).lower()
+        if 'credentials' in error_message or 'service account' in error_message or 'token_uri' in error_message:
+            return {
+                'error': 'invalid_credentials',
+                'message': 'A credencial do Google Vision está inválida ou incompleta. Verifique o arquivo JSON exportado do Google Cloud Console.'
+            }
+        return {'error': 'vision_api_error', 'message': f'Erro ao chamar o Google Vision: {e}'}
 
 
 def init_db():
@@ -269,10 +359,12 @@ def try_classify(image_path):
     
     Returns a dict with category, explanation, label and confidence.
     """
-    # Try Google Vision API first
+    # Try Google Vision API first. If it returns an error dict, continue to fallbacks.
     vision_result = classify_with_vision_api(image_path)
-    if vision_result:
+    if vision_result and not (isinstance(vision_result, dict) and vision_result.get('error')):
         return vision_result
+    if isinstance(vision_result, dict) and vision_result.get('error'):
+        print(f"[ML] Vision API unavailable, reason={vision_result.get('error')}: {vision_result.get('message')}")
 
     # Fallback to TensorFlow
     try:
