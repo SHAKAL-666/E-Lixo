@@ -91,7 +91,7 @@ def map_label_to_category(label):
 def ensure_google_credentials():
     def validate_credentials_file(candidate):
         try:
-            with open(candidate, 'r', encoding='utf-8') as f:
+            with open(candidate, 'r', encoding='utf-8-sig') as f:
                 payload = json.load(f)
         except Exception as exc:
             print(f'[Vision API Error] Could not parse credentials JSON at {candidate}: {exc}')

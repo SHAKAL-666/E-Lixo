@@ -28,3 +28,4 @@ data/
 # Editor settings
 .vscode/
 .idea/
+google_service_account.json
